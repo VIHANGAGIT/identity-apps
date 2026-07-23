@@ -21,6 +21,18 @@
     z-index: 1500;
 }
 
+/*
+ * Raise the full-page modal dimmer above MUI/Oxygen layers (Drawer 1200, AppBar 1100) so the
+ * entire background - including the left navigation and the login-flow predefined-flows panel -
+ * is dimmed. A higher-specificity selector is used because a duplicate copy of Semantic's base
+ * ".ui.dimmer{z-index:1000}" can be bundled into the app-entry stylesheet and loaded after the
+ * theme; matching on ".ui.page.modals.dimmer" wins over that plain ".ui.dimmer" regardless of
+ * load order.
+ */
+.ui.page.modals.dimmer {
+    z-index: 1500;
+}
+
 .ui.page.dimmer {
     display: flex !important;
 }
