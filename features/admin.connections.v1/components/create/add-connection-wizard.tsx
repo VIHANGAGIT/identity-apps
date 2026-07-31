@@ -69,6 +69,7 @@ import {
 import { CommonAuthenticatorConstants } from "../../constants/common-authenticator-constants";
 import { ConnectionUIConstants } from "../../constants/connection-ui-constants";
 import { FederatedAuthenticatorConstants } from "../../constants/federated-authenticator-constants";
+import useDynamicFieldOptions from "../../hooks/use-dynamic-field-options";
 import {
     CommonPluggableComponentPropertyInterface,
     ConnectionInterface,
@@ -136,6 +137,15 @@ export const CreateConnectionWizard: FC<CreateConnectionWizardPropsInterface> = 
         isLoading: isConnectionMetaDataFetchRequestLoading,
         error: connectionMetaDataFetchRequestError
     } = useGetConnectionMetaData(template?.id);
+
+    /**
+     * Resolves the options of the create form fields that source them from another resource,
+     * e.g. a field referencing another connection. A no-op for every connector that does not
+     * declare an `optionsSource`.
+     */
+    const { fields: resolvedCreateFormFields } = useDynamicFieldOptions(
+        connectionMetaData?.create?.modal?.form?.fields
+    );
 
     let submitAdvanceForm: () => void;
     let triggerPreviousForm: () => void;
@@ -750,7 +760,7 @@ export const CreateConnectionWizard: FC<CreateConnectionWizardPropsInterface> = 
                             uncontrolledForm={ true }
                         >
                             <DynamicWizardPage>
-                                { renderFormFields(modifyFormFields(connectionMetaData?.create?.modal?.form?.fields)) }
+                                { renderFormFields(modifyFormFields(resolvedCreateFormFields)) }
                             </DynamicWizardPage>
                         </DynamicWizard>
                         {
