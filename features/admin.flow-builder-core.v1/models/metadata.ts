@@ -55,6 +55,15 @@ export interface MetadataInterface {
      */
     flowExtensionConnections?: FlowExtensionConnectionInterface[];
     /**
+     * Executors contributed by an extension deployed on the server, such as a connector placed in
+     * `repository/components/dropins`.
+     *
+     * These are not known to the console at build time, so they are turned into palette steps at
+     * runtime instead of being declared in `steps.json`. Built in executors are not described here;
+     * they are advertised by name in {@link MetadataInterface.supportedExecutors} only.
+     */
+    extensionExecutors?: ExtensionExecutorInterface[];
+    /**
      * Is a Workflow engagement enabled?
      */
     workflowEnabled: boolean;
@@ -112,6 +121,47 @@ export interface ExecutorConnectionInterface {
      * List of connections for the executor.
      */
     connections: string[];
+}
+
+/**
+ * Interface for an executor contributed by an extension deployed on the server.
+ *
+ * Everything the console needs in order to offer the executor as a step is carried here, so a newly
+ * deployed connector shows up without a console release.
+ */
+export interface ExtensionExecutorInterface {
+    /**
+     * Unique name of the executor, as registered with the flow execution engine. This is the value
+     * written to `data.action.executor.name`, and the key used by `executorConnections`.
+     */
+    name: string;
+    /**
+     * Human readable name shown in the palette and on the canvas node.
+     */
+    displayName?: string;
+    /**
+     * Short explanation of what the step does, shown under the label in the palette.
+     */
+    description?: string;
+    /**
+     * Reserved tags declared by the executor, e.g. `RECOVERY_FACTOR`. Interpreted by the server, not
+     * by the composer.
+     */
+    tags?: string[];
+    /**
+     * Icon for the executor. Either an absolute URL or a path relative to the console static
+     * resources, both of which `loadStaticResource` handles.
+     */
+    icon?: string;
+    /**
+     * Whether a connection has to be selected before a step using this executor is valid. Drives
+     * whether the connection picker is shown in the property panel.
+     */
+    requiresConnection?: boolean;
+    /**
+     * Name of the authenticator backing this executor.
+     */
+    associatedAuthenticator?: string;
 }
 
 /**

@@ -22,12 +22,14 @@ import { IdentifiableComponentInterface } from "@wso2is/core/models";
 import React, { FC, ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import AppleExecution from "./apple-execution";
-import DaonExecution from "./daon-execution";
+import ExtensionExecution from "./extension-execution";
 import FacebookExecution from "./facebook-execution";
 import GithubExecution from "./github-execution";
 import GoogleExecution from "./google-execution";
 import FlowExtensionExecution from "./flow-extension-execution";
 import MicrosoftExecution from "./microsoft-execution";
+import useAuthenticationFlowBuilderCore from "../../../../../hooks/use-authentication-flow-builder-core-context";
+import { ExtensionExecutorInterface } from "../../../../../models/metadata";
 import { ExecutionTypes } from "../../../../../models/steps";
 import "./execution-factory.scss";
 import { ExecutionMinimalPropsInterface } from "../execution-minimal";
@@ -49,6 +51,7 @@ const ExecutionFactory: FC<ExecutionFactoryPropsInterface> = ({
     "data-componentid": componentId = "execution-factory"
 }: ExecutionFactoryPropsInterface): ReactElement => {
     const { t } = useTranslation();
+    const { metadata } = useAuthenticationFlowBuilderCore();
 
     if ((resource.data?.action as any)?.executor?.name === ExecutionTypes.GoogleFederation) {
         return (
@@ -77,12 +80,6 @@ const ExecutionFactory: FC<ExecutionFactoryPropsInterface> = ({
     if ((resource.data?.action as any)?.executor?.name === ExecutionTypes.GithubFederation) {
         return (
             <GithubExecution resource={ resource } />
-        );
-    }
-
-    if ((resource.data?.action as any)?.executor?.name === ExecutionTypes.DaonFederation) {
-        return (
-            <DaonExecution resource={ resource } />
         );
     }
 
@@ -132,6 +129,21 @@ const ExecutionFactory: FC<ExecutionFactoryPropsInterface> = ({
     if ((resource.data?.action as any)?.executor?.name === ExecutionTypes.FlowExtension) {
         return (
             <FlowExtensionExecution resource={ resource } />
+        );
+    }
+
+    /*
+     * Executors above are known at build time. Anything else may still have been contributed by an
+     * extension deployed on the server, in which case the flow metadata describes how to render it.
+     */
+    const isContributedByExtension: boolean = !!metadata?.extensionExecutors?.some(
+        (executor: ExtensionExecutorInterface) =>
+            executor.name === (resource.data?.action as any)?.executor?.name
+    );
+
+    if (isContributedByExtension) {
+        return (
+            <ExtensionExecution resource={ resource } />
         );
     }
 
