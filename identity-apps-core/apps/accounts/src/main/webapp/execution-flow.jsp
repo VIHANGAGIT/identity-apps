@@ -77,8 +77,6 @@
     final String INVITED_USER_REGISTRATION = "INVITED_USER_REGISTRATION";
     final String PASSWORD_RECOVERY = "PASSWORD_RECOVERY";
 
-    // The flow engine sends this portal as the OAuth2 redirect_uri for every OIDC executor, so an
-    // authorization error response arrives here as query parameters in place of the code.
     String authError = request.getParameter("error");
     String authErrorDescription = request.getParameter("error_description");
 
@@ -254,10 +252,6 @@
                         return;
                     }
 
-                    // An OAuth2 authorization response is either code+state or error+state
-                    // (RFC 6749 section 4.1.2.1). Resume the flow with the error the same way the code is
-                    // resumed, so the executor that started the redirect is the one that decides what it
-                    // means. Without this the missing code reads as a fresh visit and the flow restarts.
                     if (authError !== "null" && state !== "null") {
                         setPostBody({
                             flowId: savedFlowId,

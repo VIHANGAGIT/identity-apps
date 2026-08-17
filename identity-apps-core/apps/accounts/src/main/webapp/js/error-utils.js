@@ -29,10 +29,7 @@ function stripBraces(s) {
 }
 
 /**
- * Whether a string is an i18n token, i.e. wrapped in double curly braces.
- *
- * @param {string} s - The string to test.
- * @returns {boolean} True when the string is a "{{key}}" token.
+ * Whether a string is an i18n token.
  */
 function isI18nToken(s) {
     return !!s && s.startsWith("{{") && s.endsWith("}}");
@@ -244,12 +241,7 @@ function getI18nKeyForError(errorCode, flowType, errorMessage, errorDescription)
 
         default:
 
-            // An executor registered by a connector deployed on the server has no case above: this portal
-            // has no build time knowledge of its codes. Such an executor marks text it means the end user
-            // to see by wrapping it in "{{ }}" - the same convention stripBraces and resolveElementText
-            // already use - and the error page resolves the stripped value against its resource bundle.
-            // Anything left unwrapped is internal detail (a diagnostic description, an administrator
-            // facing message) and is never rendered, so the page keeps its own flow-type wording.
+            // An executor registered by a connector deployed on the server has no case above. Those can be handled through here.
             if (isI18nToken(errorMessage) || isI18nToken(errorDescription)) {
                 return {
                     message: isI18nToken(errorMessage)
