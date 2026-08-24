@@ -29,6 +29,7 @@ import { HttpMethods,
     HttpErrorResponseDataInterface
 } from "@wso2is/core/models";
 import { AxiosError, AxiosRequestConfig, AxiosResponse } from "axios";
+import useSWRInfinite, { SWRInfiniteResponse } from "swr/infinite";
 import { ConnectionUIConstants } from "../constants/connection-ui-constants";
 import { NotificationSenderSMSInterface } from "../models/authenticators";
 import {
@@ -48,7 +49,8 @@ import {
     JITProvisioningResponseInterface,
     OutboundProvisioningConnectorInterface,
     OutboundProvisioningConnectorListItemInterface,
-    OutboundProvisioningConnectorMetaInterface
+    OutboundProvisioningConnectorMetaInterface,
+    StrictConnectionInterface
 } from "../models/connection";
 
 /**
@@ -228,6 +230,108 @@ export const useGetConnections = <Data = ConnectionListResponseInterface, Error 
         isLoading: !expectEmpty && !error && !data,
         isValidating,
         mutate
+    };
+};
+
+/**
+ * Result of {@link useGetConnectionsPages}.
+ */
+export interface ConnectionsPagesResultInterface {
+    connections: StrictConnectionInterface[];
+    totalResults: number;
+    hasMore: boolean;
+    isLoading: boolean;
+    isLoadingMore: boolean;
+    error: AxiosError<RequestErrorInterface>;
+    loadMore: () => void;
+}
+
+/**
+ * Hook to page through the connection list.
+ *
+ * Each page is a cache entry of its own keyed by its offset, so advancing only transfers the records that have not
+ * been fetched yet and the pages already rendered stay mounted.
+ *
+ * @param pageSize - Number of connections per page.
+ * @param filter - Search filter.
+ * @param requiredAttributes - Extra attributes to be included in the list response.
+ * @param shouldFetch - Whether the request should be sent.
+ * @returns The connections fetched so far along with the means to ask for more.
+ */
+export const useGetConnectionsPages = (
+    pageSize: number,
+    filter?: string,
+    requiredAttributes?: string,
+    shouldFetch: boolean = true
+): ConnectionsPagesResultInterface => {
+    const { resourceEndpoints } = useResourceEndpoints();
+
+    const getKey = (
+        pageIndex: number,
+        previousPage: ConnectionListResponseInterface
+    ): RequestConfigInterface | null => {
+        if (!shouldFetch) {
+            return null;
+        }
+
+        // Nothing left to ask for once a page came back short.
+        if (previousPage && (previousPage.identityProviders?.length ?? 0) < pageSize) {
+            return null;
+        }
+
+        return {
+            headers: {
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            },
+            method: HttpMethods.GET,
+            params: {
+                filter,
+                limit: pageSize,
+                offset: pageIndex * pageSize,
+                requiredAttributes
+            },
+            url: resourceEndpoints.identityProviders
+        };
+    };
+
+    const {
+        data,
+        error,
+        isValidating,
+        size,
+        setSize
+    }: SWRInfiniteResponse<ConnectionListResponseInterface, AxiosError<RequestErrorInterface>> = useSWRInfinite<
+        ConnectionListResponseInterface,
+        AxiosError<RequestErrorInterface>
+    >(
+        getKey,
+        async (request: RequestConfigInterface): Promise<ConnectionListResponseInterface> => {
+            const response: AxiosResponse<ConnectionListResponseInterface> = await httpClient(request);
+
+            return response.data;
+        },
+        {
+            // Advancing must not re-request the pages already held.
+            revalidateFirstPage: false,
+            revalidateOnFocus: false,
+            shouldRetryOnError: false
+        }
+    );
+
+    const connections: StrictConnectionInterface[] = data
+        ? data.flatMap((page: ConnectionListResponseInterface) => page?.identityProviders ?? [])
+        : [];
+    const totalResults: number = data?.[0]?.totalResults ?? 0;
+
+    return {
+        connections,
+        error,
+        hasMore: connections.length < totalResults,
+        isLoading: shouldFetch && !error && !data,
+        isLoadingMore: isValidating && !!data,
+        loadMore: () => setSize(size + 1),
+        totalResults
     };
 };
 

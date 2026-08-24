@@ -18,14 +18,20 @@
 
 import get from "lodash-es/get";
 import isEmpty from "lodash-es/isEmpty";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { getConnectionDetails, useGetConnections } from "../api/connections";
-import {
-    ConnectionInterface,
-    ConnectionListResponseInterface,
-    StrictConnectionInterface
-} from "../models/connection";
+import { ConnectionsPagesResultInterface, useGetConnectionsPages } from "../api/connections";
+import { StrictConnectionInterface } from "../models/connection";
+
+/**
+ * Number of connections fetched each time the dropdown is scrolled to its end.
+ */
+const CONNECTIONS_PAGE_SIZE: number = 10;
+
+/**
+ * Attributes the option list needs on top of the basic connection attributes.
+ */
+const CONNECTIONS_REQUIRED_ATTRIBUTES: string = "federatedAuthenticators,templateId";
 
 /**
  * Supported option sources of a dynamic `select` field.
@@ -119,9 +125,6 @@ const useDynamicFieldOptions = (
 
     const { t } = useTranslation();
 
-    const [ templateIdsByConnection, setTemplateIdsByConnection ] = useState<Record<string, string>>({});
-    const [ isResolvingTemplateIds, setIsResolvingTemplateIds ] = useState<boolean>(false);
-
     /**
      * Sources declared by the given fields. Empty for every form that does not use the feature.
      */
@@ -136,27 +139,31 @@ const useDynamicFieldOptions = (
                 source?.type === DynamicFieldOptionsSourceTypes.CONNECTIONS);
     }, [ fields ]);
 
-    const shouldFetchConnections: boolean = sources.length > 0;
-
-    const {
-        data: connectionsResponse,
-        error: connectionsFetchRequestError
-    } = useGetConnections<ConnectionListResponseInterface>(
-        null,
-        null,
-        undefined,
-        "federatedAuthenticators",
-        shouldFetchConnections,
-        true
+    /**
+     * Template the options are scoped to. Optional, and taken from the first source that declares one.
+     */
+    const templateId: string = useMemo(
+        () => sources
+            .map((source: DynamicFieldOptionsSourceInterface) => source?.templateId)
+            .find((declared: string) => !isEmpty(declared)),
+        [ sources ]
     );
 
-    const isConnectionListLoading: boolean = shouldFetchConnections
-        && !connectionsFetchRequestError
-        && !connectionsResponse;
+    const filter: string = isEmpty(templateId)
+        ? "isEnabled eq \"true\""
+        : `templateId eq "${ templateId }" and isEnabled eq "true"`;
 
-    const connections: StrictConnectionInterface[] = useMemo(
-        () => connectionsResponse?.identityProviders ?? [],
-        [ connectionsResponse ]
+    const {
+        connections,
+        hasMore,
+        isLoading,
+        isLoadingMore,
+        loadMore
+    }: ConnectionsPagesResultInterface = useGetConnectionsPages(
+        CONNECTIONS_PAGE_SIZE,
+        filter,
+        CONNECTIONS_REQUIRED_ATTRIBUTES,
+        sources.length > 0
     );
 
     /**
@@ -164,7 +171,7 @@ const useDynamicFieldOptions = (
      */
     const getCandidates = (source: DynamicFieldOptionsSourceInterface): StrictConnectionInterface[] => {
         return connections.filter((connection: StrictConnectionInterface) => {
-            if (source?.excludeCurrent && connection?.id === context?.currentConnectionId) {
+            if (connection?.id === context?.currentConnectionId) {
                 return false;
             }
 
@@ -178,69 +185,23 @@ const useDynamicFieldOptions = (
         });
     };
 
-    /**
-     * Ids of the candidates whose template id has to be looked up, since the connections list
-     * response does not carry it.
-     */
-    const idsRequiringTemplateId: string[] = useMemo(() => {
-        const ids: Set<string> = new Set<string>();
-
-        sources
-            .filter((source: DynamicFieldOptionsSourceInterface) => !isEmpty(source?.templateId))
-            .forEach((source: DynamicFieldOptionsSourceInterface) => {
-                getCandidates(source).forEach((connection: StrictConnectionInterface) => ids.add(connection.id));
-            });
-
-        return Array.from(ids).sort();
-    }, [ sources, connections, context?.currentConnectionId ]);
-
-    const idsRequiringTemplateIdKey: string = idsRequiringTemplateId.join(",");
-
-    /**
-     * Resolves the template id of every candidate.
+    /*
+     * Without a template the authenticator is matched on the client, so a fetched page can leave too few options to
+     * overflow the menu, and without a scrollbar there is no way to reach the next page. Keep asking for pages until
+     * a page's worth of options survives the match, or until the list is exhausted.
      */
     useEffect(() => {
-        if (isEmpty(idsRequiringTemplateId)) {
-            setTemplateIdsByConnection({});
-            setIsResolvingTemplateIds(false);
-
+        if (!isEmpty(templateId) || isLoading || isLoadingMore || !hasMore) {
             return;
         }
 
-        let isActive: boolean = true;
+        const isUnderfilled: boolean = sources.some((source: DynamicFieldOptionsSourceInterface) =>
+            getCandidates(source).length < CONNECTIONS_PAGE_SIZE);
 
-        setIsResolvingTemplateIds(true);
-
-        Promise.all(
-            idsRequiringTemplateId.map((id: string) =>
-                getConnectionDetails(id).catch(() => null)
-            )
-        ).then((responses: ConnectionInterface[]) => {
-            if (!isActive) {
-                return;
-            }
-
-            const resolved: Record<string, string> = {};
-
-            responses.forEach((connection: ConnectionInterface, index: number) => {
-                if (connection?.templateId) {
-                    resolved[ idsRequiringTemplateId[ index ] ] = connection.templateId;
-                }
-            });
-
-            setTemplateIdsByConnection(resolved);
-        }).finally(() => {
-            if (isActive) {
-                setIsResolvingTemplateIds(false);
-            }
-        });
-
-        return () => {
-            isActive = false;
-        };
-    }, [ idsRequiringTemplateIdKey ]);
-
-    const isLoading: boolean = isConnectionListLoading || isResolvingTemplateIds;
+        if (isUnderfilled) {
+            loadMore();
+        }
+    }, [ templateId, isLoading, isLoadingMore, hasMore, connections, sources ]);
 
     const resolvedFields: Record<string, any>[] = useMemo(() => {
         if (!Array.isArray(fields)) {
@@ -258,16 +219,6 @@ const useDynamicFieldOptions = (
             const labelField: string = source?.labelField ?? "name";
 
             const options: { text: string; value: string }[] = getCandidates(source)
-                .filter((connection: StrictConnectionInterface) => {
-                    if (isEmpty(source?.templateId)) {
-                        return true;
-                    }
-
-                    const resolvedTemplateId: string = templateIdsByConnection[ connection.id ];
-
-                    // Drop the connection when its template id could not be resolved.
-                    return resolvedTemplateId === source.templateId;
-                })
                 .map((connection: StrictConnectionInterface) => ({
                     text: get(connection, labelField) ?? get(connection, "id"),
                     value: get(connection, valueField)
@@ -295,6 +246,9 @@ const useDynamicFieldOptions = (
 
             return {
                 ...field,
+                hasMore,
+                isLoadingMore,
+                onLoadMore: loadMore,
                 options,
                 placeholder: isLoading
                     ? t("authenticationProvider:forms.authenticatorSettings.dynamicOptions.loading")
@@ -304,7 +258,7 @@ const useDynamicFieldOptions = (
                 readOnly: field?.readOnly || isUnusable
             };
         });
-    }, [ fields, connections, templateIdsByConnection, isLoading, context?.currentValues ]);
+    }, [ fields, connections, hasMore, isLoadingMore, isLoading, loadMore, context?.currentValues ]);
 
     return {
         fields: resolvedFields,

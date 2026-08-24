@@ -17,13 +17,23 @@
  */
 
 import FormGroup from "@oxygen-ui/react/FormGroup";
-import { IdentifiableComponentInterface, TestableComponentInterface } from "@wso2is/core/models";
+import { IdentifiableComponentInterface } from "@wso2is/core/models";
 import { Hint } from "@wso2is/react-components";
 import { FieldState } from "final-form";
 import React, { ReactElement, ReactNode } from "react";
 import { FieldProps, FieldRenderProps, Field as FinalFormField } from "react-final-form";
 import SelectFieldAdapter from "../../../components/adapters/select-field-adapter";
 import { getValidation } from "../utils/validate";
+
+/**
+ * Menu height cap, kept low enough that a full page of options overflows and can therefore be scrolled.
+ */
+const MENU_MAX_HEIGHT: number = 300;
+
+/**
+ * Distance from the bottom of the menu, in pixels, at which the next page is requested.
+ */
+const MENU_SCROLL_THRESHOLD: number = 24;
 
 /**
  * Option of a dynamic select field.
@@ -62,10 +72,13 @@ export interface FieldSelectPropsInterface extends Omit<FieldProps<any, any, any
      * Whether the field is read only.
      */
     readOnly?: boolean;
-    /**
-     * Validation of the field.
-     */
-    validation?: (value: string | number | any, allValues: Record<string, unknown>) => any;
+    hasMore?: boolean;
+    isLoadingMore?: boolean;
+    onLoadMore?: () => void;
+    validation?: (
+        value: DynamicSelectFieldValueType,
+        allValues: Record<string, unknown>
+    ) => string | undefined | Promise<string | undefined>;
 }
 
 /**
@@ -76,10 +89,13 @@ export interface FieldSelectPropsInterface extends Omit<FieldProps<any, any, any
 export const FieldSelect = (props: FieldSelectPropsInterface): ReactElement => {
 
     const {
+        hasMore,
         hint,
         initialValue,
+        isLoadingMore,
         label,
         name,
+        onLoadMore,
         options,
         placeholder,
         readOnly,
@@ -88,6 +104,23 @@ export const FieldSelect = (props: FieldSelectPropsInterface): ReactElement => {
         [ "data-componentid" ]: componentId,
         [ "data-testid" ]: testId
     } = props;
+
+    /**
+     * Requests the next page once the menu is scrolled close to its end.
+     */
+    const handleMenuScroll: (event: React.UIEvent<HTMLElement>) => void = (
+        event: React.UIEvent<HTMLElement>
+    ): void => {
+        if (!hasMore || isLoadingMore) {
+            return;
+        }
+
+        const menu: HTMLElement = event.currentTarget;
+
+        if (menu.scrollHeight - menu.scrollTop - menu.clientHeight <= MENU_SCROLL_THRESHOLD) {
+            onLoadMore();
+        }
+    };
 
     return (
         <FormGroup>
@@ -107,7 +140,15 @@ export const FieldSelect = (props: FieldSelectPropsInterface): ReactElement => {
                         placeholder={ placeholder }
                         required={ required }
                         readOnly={ readOnly }
-                        data-componentid={ componentId ?? testId ?? `${ name }-select-field` }
+                        MenuProps={ onLoadMore
+                            ? {
+                                PaperProps: {
+                                    onScroll: handleMenuScroll,
+                                    style: { maxHeight: MENU_MAX_HEIGHT }
+                                }
+                            }
+                            : undefined }
+                        data-componentid={ componentId ?? `${ name }-select-field` }
                     />
                 ) }
             />

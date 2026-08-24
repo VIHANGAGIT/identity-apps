@@ -67,6 +67,10 @@ interface SelectFieldAdapterPropsInterface
      * Defaults to false.
      */
     isClearable?: boolean;
+    /**
+     * Props passed to the dropdown menu. Merged with the defaults of this adapter.
+     */
+    MenuProps?: SelectProps["MenuProps"];
 }
 
 /**
@@ -91,6 +95,7 @@ const SelectFieldAdapter: FunctionComponent<SelectFieldAdapterPropsInterface> = 
         options,
         isClearable = false,
         readOnly = false,
+        MenuProps = {},
         "data-componentid": componentId = "select-field-adapter",
         ...rest
     } = props;
@@ -147,7 +152,7 @@ const SelectFieldAdapter: FunctionComponent<SelectFieldAdapterPropsInterface> = 
                         )
                     }
                     data-componentid={ `${componentId}-input` }
-                    MenuProps={ { "data-componentid": `${componentId}-menu` } as any }
+                    MenuProps={ { "data-componentid": `${componentId}-menu`, ...MenuProps } as any }
                     { ...(rest as SelectProps) }
                 >
                     { options?.map((option: DropDownItemInterface, index: number) => (
